@@ -21,10 +21,9 @@ AutoWallpaper is a modern Android application that automatically switches your d
 
 ## Installation
 
-1. Clone this repository.
-2. Open the project in Android Studio.
-3. Build and run the app on your Android device (Android 7.0+ supported, Android 12+ recommended for dynamic colors).
-4. Follow the in-app instructions to set AutoWallpaper as your active live wallpaper.
+1. Download the latest APK from the **Releases** section on GitHub.
+2. Install the APK on your Android device (Android 7.0+ supported, Android 12+ recommended for dynamic colors).
+3. Follow the in-app instructions to set AutoWallpaper as your active live wallpaper.
 
 ## Requirements
 
