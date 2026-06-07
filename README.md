@@ -13,8 +13,10 @@ AutoWallpaper is a modern Android application that automatically switches your d
 
 ## Screenshots
 
-![Preview Screen](/images/Screenshot_20260607_180713.png)
-![Settings Screen](/images/Screenshot_20260607_180842.png)
+<p align="center">
+  <img src="images/Screenshot_20260607_180713.png" width="30%" />
+  <img src="images/Screenshot_20260607_180842.png" width="30%" />
+</p>
 
 
 ## Installation
