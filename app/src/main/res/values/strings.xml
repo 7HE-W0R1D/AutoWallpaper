@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">AutoWallpaper</string>
+    <string name="wallpaper_description">Live wallpaper that automatically switches between light and dark theme wallpapers, and blurs on unlock.</string>
+</resources>
