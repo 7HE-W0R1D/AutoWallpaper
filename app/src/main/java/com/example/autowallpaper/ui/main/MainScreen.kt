@@ -91,7 +91,9 @@ fun SettingsScreen(
   viewModel: MainScreenViewModel
 ) {
   val context = LocalContext.current
+  var lastCroppedIsDark by remember { mutableStateOf(false) }
   val cropLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+    viewModel.setUsingCustom(lastCroppedIsDark, true)
     viewModel.refreshState()
   }
 
@@ -173,6 +175,7 @@ fun SettingsScreen(
         try {
           if (resInfoList.isNotEmpty()) {
             val title = if (isDark) "Crop Dark Wallpaper" else "Crop Light Wallpaper"
+            lastCroppedIsDark = isDark
             cropLauncher.launch(Intent.createChooser(intent, title))
           } else {
             // No system cropper found, fallback to direct save

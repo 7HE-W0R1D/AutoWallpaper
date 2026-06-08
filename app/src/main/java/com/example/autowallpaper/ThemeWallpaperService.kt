@@ -12,6 +12,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Rect
+import android.app.WallpaperColors
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -114,7 +115,36 @@ class ThemeWallpaperService : WallpaperService() {
       if (visible) {
         updateLockStateWithAnimation()
         loadWallpaperAndBlur(forceReload = false)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+          notifyColorsChanged()
+        }
         triggerRedraw()
+      }
+    }
+
+    override fun onComputeColors(): WallpaperColors? {
+      if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O_MR1) return null
+      
+      return try {
+        currentBitmap?.let { bitmap ->
+          if (!bitmap.isRecycled) {
+            // Extraction from a smaller version is faster and often more accurate for theme palettes
+            val width = bitmap.width
+            val height = bitmap.height
+            val scale = 0.1f
+            val smallBitmap = Bitmap.createScaledBitmap(
+              bitmap,
+              (width * scale).toInt().coerceAtLeast(1),
+              (height * scale).toInt().coerceAtLeast(1),
+              true
+            )
+            val colors = WallpaperColors.fromBitmap(smallBitmap)
+            smallBitmap.recycle()
+            colors
+          } else null
+        }
+      } catch (e: Exception) {
+        null
       }
     }
 
@@ -210,6 +240,9 @@ class ThemeWallpaperService : WallpaperService() {
             }
             currentBitmap = BitmapFactory.decodeFile(filePath, options)
             currentFilePath = filePath
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+              notifyColorsChanged()
+            }
           }
         } catch (e: Exception) {
           e.printStackTrace()

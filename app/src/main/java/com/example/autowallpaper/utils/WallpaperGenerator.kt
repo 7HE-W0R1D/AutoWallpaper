@@ -20,11 +20,11 @@ object WallpaperGenerator {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         
-        // Fallback colors matching Material 3 palettes
-        val colorSurface = if (isDark) 0xFF1A1C1E else 0xFFFCFCFF
-        val colorPrimary = if (isDark) 0xFF384948 else 0xFFCCE8E7
-        val colorSecondary = if (isDark) 0xFF3F4948 else 0xFFDCE5E3
-        val colorTertiary = if (isDark) 0xFF404652 else 0xFFDEE2F2
+        // Use more distinct colors for light/dark to trigger visible system theme changes
+        val colorSurface = if (isDark) 0xFF0D0614 else 0xFFFFF8F6 
+        val colorPrimary = if (isDark) 0xFFE040FB else 0xFF8E24AA
+        val colorSecondary = if (isDark) 0xFFFF8A65 else 0xFFD84315
+        val colorTertiary = if (isDark) 0xFF26C6DA else 0xFF00838F
 
         canvas.drawColor(colorSurface.toInt())
 

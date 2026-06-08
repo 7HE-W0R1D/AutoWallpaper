@@ -82,6 +82,11 @@ class MainScreenViewModel(
     }
   }
 
+  fun setUsingCustom(isDark: Boolean, using: Boolean) {
+    if (isDark) settingsManager.usingCustomDark = using else settingsManager.usingCustomLight = using
+    refreshState()
+  }
+
   private fun checkServiceActive(): Boolean {
     return try {
       val wpm = WallpaperManager.getInstance(context)
