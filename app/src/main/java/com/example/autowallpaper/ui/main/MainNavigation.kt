@@ -35,58 +35,56 @@ fun MainNavigation() {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
   var currentScreen by remember { mutableStateOf(Screen.Home) }
 
-  Scaffold(
-    bottomBar = {
-      // Use a Box without explicit height to allow shadows to bleed
-      Box(
-        modifier = Modifier
-          .fillMaxWidth()
-          .navigationBarsPadding()
-          .padding(horizontal = 24.dp)
-          .padding(bottom = 16.dp),
-        contentAlignment = Alignment.BottomCenter
-      ) {
-        Row(
-          verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.Center,
-          modifier = Modifier.wrapContentWidth()
-        ) {
-          // Compact Nav Pill (Left)
-          FloatingNavigationBar(
-            currentScreen = currentScreen,
-            onScreenSelected = { currentScreen = it }
-          )
-
-          Spacer(modifier = Modifier.width(16.dp))
-
-          // Set Wallpaper FAB (Right) - Elevated primary action
-          Surface(
-            modifier = Modifier
-              .size(64.dp)
-              .clickable { launchLiveWallpaperChooser(context) },
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.primaryContainer,
-            shadowElevation = 6.dp,
-            tonalElevation = 3.dp
-          ) {
-            Box(contentAlignment = Alignment.Center) {
-              Icon(
-                imageVector = Icons.Rounded.Check,
-                contentDescription = "Set Wallpaper",
-                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.size(32.dp)
-              )
-            }
-          }
+  Box(modifier = Modifier.fillMaxSize()) {
+    // Main Content - Scaffold now only handles the main surface
+    Scaffold(
+      containerColor = MaterialTheme.colorScheme.background
+    ) { innerPadding ->
+      // Pass the padding to screens so they can handle their own content spacing
+      Box(modifier = Modifier.padding(innerPadding)) {
+        when (currentScreen) {
+          Screen.Home -> HomeScreen(state = state, viewModel = viewModel)
+          Screen.Settings -> SettingsScreen(state = state, viewModel = viewModel)
         }
       }
-    },
-    containerColor = MaterialTheme.colorScheme.background
-  ) { innerPadding ->
-    Box(modifier = Modifier.padding(innerPadding)) {
-      when (currentScreen) {
-        Screen.Home -> HomeScreen(state = state, viewModel = viewModel)
-        Screen.Settings -> SettingsScreen(state = state, viewModel = viewModel)
+    }
+
+    // Truly Floating Navigation Bar - decoulped from Scaffold and constrained to content width
+    Row(
+      modifier = Modifier
+        .align(Alignment.BottomCenter)
+        .navigationBarsPadding()
+        .padding(bottom = 16.dp)
+        .wrapContentSize(), // Only takes up space for the pill and FAB
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.Center
+    ) {
+      // Compact Nav Pill (Left)
+      FloatingNavigationBar(
+        currentScreen = currentScreen,
+        onScreenSelected = { currentScreen = it }
+      )
+
+      Spacer(modifier = Modifier.width(12.dp))
+
+      // Set Wallpaper FAB (Right)
+      Surface(
+        modifier = Modifier
+          .size(64.dp)
+          .clickable { launchLiveWallpaperChooser(context) },
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.primaryContainer,
+        shadowElevation = 6.dp,
+        tonalElevation = 3.dp
+      ) {
+        Box(contentAlignment = Alignment.Center) {
+          Icon(
+            imageVector = Icons.Rounded.Check,
+            contentDescription = "Set Wallpaper",
+            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+            modifier = Modifier.size(32.dp)
+          )
+        }
       }
     }
   }

@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -81,6 +82,9 @@ fun HomeScreen(
 
       // Large Wallpaper Preview & Tabs
       WallpaperPreviewSection(state = state)
+
+      // Spacer at the bottom to allow scrolling past the floating bar
+      Spacer(modifier = Modifier.height(140.dp))
     }
   }
 }
@@ -101,16 +105,16 @@ fun SettingsScreen(
     modifier = Modifier
       .fillMaxSize()
       .verticalScroll(rememberScrollState())
-      .padding(horizontal = 20.dp)
-      .padding(top = 24.dp)
-      .padding(bottom = 120.dp),
+      .padding(horizontal = 20.dp),
     horizontalAlignment = Alignment.CenterHorizontally
   ) {
     Text(
       text = "Wallpaper Settings",
       style = MaterialTheme.typography.titleLarge,
       fontWeight = FontWeight.Bold,
-      modifier = Modifier.fillMaxWidth(),
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(top = 24.dp),
       color = MaterialTheme.colorScheme.onBackground
     )
 
@@ -201,6 +205,9 @@ fun SettingsScreen(
 
     // About Section
     AboutSection()
+
+    // Spacer at the bottom to allow scrolling past the floating bar
+    Spacer(modifier = Modifier.height(140.dp))
   }
 }
 
@@ -238,6 +245,7 @@ fun AboutSection() {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
+        val uriHandler = LocalUriHandler.current
         Text(
           text = "Version",
           style = MaterialTheme.typography.labelLarge,
@@ -245,9 +253,12 @@ fun AboutSection() {
           color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
-          text = "1.0.0",
+          text = "1.0.4",
           style = MaterialTheme.typography.bodyMedium,
-          color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+          color = MaterialTheme.colorScheme.primary,
+          modifier = Modifier.clickable {
+            uriHandler.openUri("https://github.com/7HE-W0R1D/AutoWallpaper/releases/tag/v1.0.4")
+          }
         )
       }
     }
