@@ -153,6 +153,16 @@ class ThemeWallpaperService : WallpaperService() {
       triggerRedraw()
     }
 
+    override fun onSurfaceRedrawNeeded(holder: SurfaceHolder?) {
+      super.onSurfaceRedrawNeeded(holder)
+      triggerRedraw()
+    }
+
+    override fun onSurfaceCreated(holder: SurfaceHolder?) {
+      super.onSurfaceCreated(holder)
+      triggerRedraw()
+    }
+
     override fun onOffsetsChanged(
       xOffset: Float,
       yOffset: Float,
@@ -323,8 +333,7 @@ class ThemeWallpaperService : WallpaperService() {
               canvas.drawBitmap(currentBitmap!!, srcSharp, destRect, paint)
             }
           } else {
-            val isDarkTheme = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-            canvas.drawColor(if (isDarkTheme) 0xFF1A1C1E.toInt() else 0xFFFCFCFF.toInt())
+            drawFallback(canvas)
           }
         }
       } catch (e: Exception) {
@@ -338,6 +347,38 @@ class ThemeWallpaperService : WallpaperService() {
           }
         }
       }
+    }
+
+    private fun drawFallback(canvas: Canvas) {
+      val isDarkTheme = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+      
+      // Material 3 colors matching WallpaperGenerator
+      val colorSurface = if (isDarkTheme) 0xFF0D0614 else 0xFFFFF8F6 
+      val colorPrimary = if (isDarkTheme) 0xFFE040FB else 0xFF8E24AA
+      val colorSecondary = if (isDarkTheme) 0xFFFF8A65 else 0xFFD84315
+      val colorTertiary = if (isDarkTheme) 0xFF26C6DA else 0xFF00838F
+
+      canvas.drawColor(colorSurface.toInt())
+
+      val blobPaint = Paint().apply {
+        isAntiAlias = true
+        style = Paint.Style.FILL
+      }
+
+      val w = canvas.width.toFloat()
+      val h = canvas.height.toFloat()
+
+      blobPaint.color = colorPrimary.toInt()
+      blobPaint.alpha = 150
+      canvas.drawCircle(w * 0.2f, h * 0.3f, w * 0.8f, blobPaint)
+
+      blobPaint.color = colorSecondary.toInt()
+      blobPaint.alpha = 130
+      canvas.drawCircle(w * 0.8f, h * 0.6f, w * 0.9f, blobPaint)
+
+      blobPaint.color = colorTertiary.toInt()
+      blobPaint.alpha = 110
+      canvas.drawCircle(w * 0.4f, h * 0.9f, w * 0.7f, blobPaint)
     }
   }
 }
