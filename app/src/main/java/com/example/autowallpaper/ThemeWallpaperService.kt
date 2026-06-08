@@ -185,7 +185,8 @@ class ThemeWallpaperService : WallpaperService() {
       val wasLocked = isLocked
       updateLockState()
       
-      val targetBlurValue = if (isLocked || !settingsManager.blurEnabled) 0f else 1f
+      // Force sharp version in system preview
+      val targetBlurValue = if (isLocked || !settingsManager.blurEnabled || isPreview) 0f else 1f
       
       if (blurTransitionValue != targetBlurValue) {
         transitionAnimator?.cancel()

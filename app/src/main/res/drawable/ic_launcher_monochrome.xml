@@ -10,42 +10,29 @@
         android:scaleX="0.45"
         android:scaleY="0.45">
 
-        <!-- Clipping circle: exact reproduction of the SVG clip path -->
+        <!-- Clipping circle ensures shapes don't bleed outside the inner logo boundary -->
         <clip-path
             android:pathData="M180,0C279.41,0 360,80.59 360,180C360,279.41 279.41,360 180,360C80.59,360 0,279.41 0,180C0,80.59 80.59,0 180,0Z"/>
 
-        <!-- Background fill -->
+        <!-- Big Window -->
         <path
-            android:fillColor="#F6EDFF"
-            android:pathData="M0,0h360v360h-360z"/>
-
-        <!-- Big Window Fill and Stroke -->
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M-20,-16h246v287h-246z"/>
-        <path
-            android:strokeColor="#625B71"
-            android:strokeWidth="8"
+            android:fillColor="#000000"
             android:pathData="M-20,-16h246v287h-246z"/>
 
-        <!-- Small Window Fill and Stroke -->
+        <!-- Small Window -->
         <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M226,271h134v89h-134z"/>
-        <path
-            android:strokeColor="#625B71"
-            android:strokeWidth="8"
+            android:fillColor="#000000"
             android:pathData="M226,271h134v89h-134z"/>
     </group>
 
-    <!-- Border is drawn in a separate group without clipping so it remains sharp at the edge -->
     <group
         android:translateX="99"
         android:translateY="99"
         android:scaleX="0.45"
         android:scaleY="0.45">
+        <!-- Outer Border circle -->
         <path
-            android:strokeColor="#625B71"
+            android:strokeColor="#000000"
             android:strokeWidth="8"
             android:pathData="M180,4C277.2,4 356,82.8 356,180C356,277.2 277.2,356 180,356C82.8,356 4,277.2 4,180C4,82.8 82.8,4 180,4Z"/>
     </group>

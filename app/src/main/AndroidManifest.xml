@@ -30,6 +30,7 @@
         <service
             android:name=".ThemeWallpaperService"
             android:label="@string/app_name"
+            android:icon="@drawable/wallpaper_thumbnail"
             android:permission="android.permission.BIND_WALLPAPER"
             android:exported="true">
             <intent-filter>
