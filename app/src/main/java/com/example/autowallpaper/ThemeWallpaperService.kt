@@ -18,16 +18,24 @@ import android.os.Handler
 import android.os.Looper
 import android.service.wallpaper.WallpaperService
 import android.view.SurfaceHolder
+import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.LinearInterpolator
 import com.example.autowallpaper.data.SettingsManager
 import com.example.autowallpaper.utils.BlurUtils
+import java.util.concurrent.Executors
 
 class ThemeWallpaperService : WallpaperService() {
 
   private val activeEngines = java.util.Collections.synchronizedSet(mutableSetOf<ThemeEngine>())
+  private val workerExecutor = Executors.newSingleThreadExecutor()
 
   override fun onCreateEngine(): Engine {
     return ThemeEngine()
+  }
+
+  override fun onDestroy() {
+    super.onDestroy()
+    workerExecutor.shutdown()
   }
 
   override fun onConfigurationChanged(newConfig: Configuration) {
@@ -49,30 +57,30 @@ class ThemeWallpaperService : WallpaperService() {
 
     private var isLocked = true
     private var isReceiverRegistered = false
+    private var isVisible = false
 
     private var blurTransitionValue = 0f // 0f = sharp, 1f = blurred
     private var transitionAnimator: ValueAnimator? = null
 
+    private var isRedrawPending = false
+
+    // Cached rectangles for drawing
+    private val destRect = Rect()
+    private val srcSharp = Rect()
+    private val srcBlurred = Rect()
+
     private val paint = Paint().apply {
-      isFilterBitmap = true // Bilinear filtering for smooth upscale
+      isFilterBitmap = true
+      isAntiAlias = false
     }
 
     private val receiver = object : BroadcastReceiver() {
       override fun onReceive(context: Context?, intent: Intent?) {
         when (intent?.action) {
-          Intent.ACTION_USER_PRESENT -> {
-            updateLockStateWithAnimation()
-          }
-          Intent.ACTION_SCREEN_OFF -> {
-            updateLockStateWithAnimation()
-          }
-          Intent.ACTION_SCREEN_ON -> {
-            updateLockStateWithAnimation()
-          }
-          SettingsManager.ACTION_SETTINGS_CHANGED -> {
-            loadWallpaperAndBlur(forceReload = true)
-            triggerRedraw()
-          }
+          Intent.ACTION_USER_PRESENT -> updateLockStateWithAnimation()
+          Intent.ACTION_SCREEN_OFF -> updateLockStateWithAnimation()
+          Intent.ACTION_SCREEN_ON -> updateLockStateWithAnimation()
+          SettingsManager.ACTION_SETTINGS_CHANGED -> loadWallpaperAsync(forceReload = true)
         }
       }
     }
@@ -82,9 +90,8 @@ class ThemeWallpaperService : WallpaperService() {
       activeEngines.add(this)
       updateLockState()
       blurTransitionValue = if (isLocked) 0f else 1f
-      loadWallpaperAndBlur(forceReload = true)
+      loadWallpaperAsync(forceReload = true)
 
-      // Register receiver
       val filter = IntentFilter().apply {
         addAction(Intent.ACTION_USER_PRESENT)
         addAction(Intent.ACTION_SCREEN_OFF)
@@ -108,48 +115,40 @@ class ThemeWallpaperService : WallpaperService() {
         isReceiverRegistered = false
       }
       transitionAnimator?.cancel()
+      handler.removeCallbacksAndMessages(null)
       recycleBitmaps()
     }
 
     override fun onVisibilityChanged(visible: Boolean) {
+      isVisible = visible
       if (visible) {
         updateLockStateWithAnimation()
-        loadWallpaperAndBlur(forceReload = false)
+        loadWallpaperAsync(forceReload = false)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
           notifyColorsChanged()
         }
         triggerRedraw()
+      } else {
+        transitionAnimator?.cancel()
       }
     }
 
     override fun onComputeColors(): WallpaperColors? {
       if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O_MR1) return null
-      
+      val bitmap = currentBitmap ?: return null
+      if (bitmap.isRecycled) return null
       return try {
-        currentBitmap?.let { bitmap ->
-          if (!bitmap.isRecycled) {
-            // Extraction from a smaller version is faster and often more accurate for theme palettes
-            val width = bitmap.width
-            val height = bitmap.height
-            val scale = 0.1f
-            val smallBitmap = Bitmap.createScaledBitmap(
-              bitmap,
-              (width * scale).toInt().coerceAtLeast(1),
-              (height * scale).toInt().coerceAtLeast(1),
-              true
-            )
-            val colors = WallpaperColors.fromBitmap(smallBitmap)
-            smallBitmap.recycle()
-            colors
-          } else null
-        }
-      } catch (e: Exception) {
-        null
-      }
+        // Fast color extraction using small scale
+        val small = Bitmap.createScaledBitmap(bitmap, 64, 64, true)
+        val colors = WallpaperColors.fromBitmap(small)
+        small.recycle()
+        colors
+      } catch (e: Exception) { null }
     }
 
     override fun onSurfaceChanged(holder: SurfaceHolder?, format: Int, width: Int, height: Int) {
       super.onSurfaceChanged(holder, format, width, height)
+      updateDrawingRects()
       triggerRedraw()
     }
 
@@ -160,31 +159,34 @@ class ThemeWallpaperService : WallpaperService() {
 
     override fun onSurfaceCreated(holder: SurfaceHolder?) {
       super.onSurfaceCreated(holder)
+      updateDrawingRects()
       triggerRedraw()
     }
 
-    override fun onOffsetsChanged(
-      xOffset: Float,
-      yOffset: Float,
-      xOffsetStep: Float,
-      yOffsetStep: Float,
-      xPixelOffset: Int,
-      yPixelOffset: Int
-    ) {
+    override fun onOffsetsChanged(xOffset: Float, yOffset: Float, xOffsetStep: Float, yOffsetStep: Float, xPixelOffset: Int, yPixelOffset: Int) {
       super.onOffsetsChanged(xOffset, yOffset, xOffsetStep, yOffsetStep, xPixelOffset, yPixelOffset)
-      updateLockStateWithAnimation()
+      // Only check lock state if visible
+      if (isVisible) {
+        val wasLocked = isLocked
+        updateLockState()
+        if (wasLocked != isLocked) {
+          updateLockStateWithAnimation()
+        }
+      }
     }
 
     fun onConfigChanged() {
-      // Regenerate default wallpapers if using them (to pick up system color changes)
-      if (!settingsManager.usingCustomLight) {
-        com.example.autowallpaper.utils.WallpaperGenerator.generateDefaultWallpaper(applicationContext, false)
+      workerExecutor.execute {
+        if (!settingsManager.usingCustomLight) {
+          com.example.autowallpaper.utils.WallpaperGenerator.generateDefaultWallpaper(applicationContext, false)
+        }
+        if (!settingsManager.usingCustomDark) {
+          com.example.autowallpaper.utils.WallpaperGenerator.generateDefaultWallpaper(applicationContext, true)
+        }
+        handler.post {
+          loadWallpaperAsync(forceReload = true)
+        }
       }
-      if (!settingsManager.usingCustomDark) {
-        com.example.autowallpaper.utils.WallpaperGenerator.generateDefaultWallpaper(applicationContext, true)
-      }
-      loadWallpaperAndBlur(forceReload = true)
-      triggerRedraw()
     }
 
     private fun updateLockState() {
@@ -192,7 +194,6 @@ class ThemeWallpaperService : WallpaperService() {
     }
 
     private fun updateLockStateWithAnimation() {
-      val wasLocked = isLocked
       updateLockState()
       
       // Force sharp version in system preview
@@ -201,7 +202,7 @@ class ThemeWallpaperService : WallpaperService() {
       if (blurTransitionValue != targetBlurValue) {
         transitionAnimator?.cancel()
         transitionAnimator = ValueAnimator.ofFloat(blurTransitionValue, targetBlurValue).apply {
-          duration = 400 // Smooth 400ms transition
+          duration = 300 // Snappier 300ms transition
           interpolator = LinearInterpolator()
           addUpdateListener { animator ->
             blurTransitionValue = animator.animatedValue as Float
@@ -209,13 +210,16 @@ class ThemeWallpaperService : WallpaperService() {
           }
           start()
         }
-      } else if (wasLocked != isLocked) {
-        triggerRedraw()
       }
     }
 
     private fun triggerRedraw() {
-      handler.post { draw() }
+      if (!isVisible || isRedrawPending) return
+      isRedrawPending = true
+      handler.post {
+        isRedrawPending = false
+        draw()
+      }
     }
 
     private fun recycleBitmaps() {
@@ -227,58 +231,98 @@ class ThemeWallpaperService : WallpaperService() {
       currentBlurRadius = -1
     }
 
-    private fun loadWallpaperAndBlur(forceReload: Boolean) {
+    private fun loadWallpaperAsync(forceReload: Boolean) {
       val isDarkTheme = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-      val wallpaperFile = if (isDarkTheme) {
-        settingsManager.getDarkWallpaperFile()
-      } else {
-        settingsManager.getLightWallpaperFile()
-      }
-
+      val wallpaperFile = if (isDarkTheme) settingsManager.getDarkWallpaperFile() else settingsManager.getLightWallpaperFile()
       val filePath = wallpaperFile.absolutePath
       val blurRadius = settingsManager.blurRadius
       val blurEnabled = settingsManager.blurEnabled
 
-      val fileChanged = filePath != currentFilePath
-      val radiusChanged = blurRadius != currentBlurRadius
+      if (!forceReload && filePath == currentFilePath && blurRadius == currentBlurRadius) return
 
-      if (forceReload || fileChanged) {
-        recycleBitmaps()
+      workerExecutor.execute {
         try {
-          if (wallpaperFile.exists()) {
-            val options = BitmapFactory.Options().apply {
-              inPreferredConfig = Bitmap.Config.ARGB_8888
+          var newBitmap: Bitmap? = null
+          if (forceReload || filePath != currentFilePath) {
+            if (wallpaperFile.exists()) {
+              val options = BitmapFactory.Options().apply {
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+                inSampleSize = 1
+              }
+              newBitmap = BitmapFactory.decodeFile(filePath, options)
             }
-            currentBitmap = BitmapFactory.decodeFile(filePath, options)
-            currentFilePath = filePath
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-              notifyColorsChanged()
+          }
+
+          var newBlurred: Bitmap? = null
+          if (blurEnabled && (newBitmap != null || (currentBitmap != null && blurRadius != currentBlurRadius))) {
+            val source = newBitmap ?: currentBitmap
+            if (source != null) {
+              val scale = 0.1f // Smaller scale for even faster blur
+              val w = (source.width * scale).toInt().coerceAtLeast(1)
+              val h = (source.height * scale).toInt().coerceAtLeast(1)
+              val scaled = Bitmap.createScaledBitmap(source, w, h, true)
+              newBlurred = BlurUtils.blur(scaled, blurRadius)
+              scaled.recycle()
+            }
+          }
+
+          handler.post {
+            var changed = false
+            if (newBitmap != null) {
+              currentBitmap?.recycle()
+              currentBitmap = newBitmap
+              currentFilePath = filePath
+              changed = true
+              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) notifyColorsChanged()
+            }
+            
+            if (blurEnabled) {
+              if (newBlurred != null || (blurRadius != currentBlurRadius)) {
+                blurredBitmap?.recycle()
+                blurredBitmap = newBlurred
+                currentBlurRadius = blurRadius
+                changed = true
+              }
+            } else if (blurredBitmap != null) {
+              blurredBitmap?.recycle()
+              blurredBitmap = null
+              currentBlurRadius = -1
+              changed = true
+            }
+
+            if (changed) {
+              updateDrawingRects()
+              triggerRedraw()
             }
           }
         } catch (e: Exception) {
           e.printStackTrace()
         }
       }
+    }
 
-      // If blur is enabled and blurred bitmap is missing or parameters changed, recreate it
-      if (blurEnabled && currentBitmap != null && (blurredBitmap == null || fileChanged || radiusChanged)) {
-        blurredBitmap?.recycle()
-        try {
-          // Optimization: Downscale the bitmap before blurring to make stack blur extremely fast
-          val scale = 0.15f
-          val width = (currentBitmap!!.width * scale).toInt().coerceAtLeast(1)
-          val height = (currentBitmap!!.height * scale).toInt().coerceAtLeast(1)
-          val scaledBitmap = Bitmap.createScaledBitmap(currentBitmap!!, width, height, true)
-          blurredBitmap = BlurUtils.blur(scaledBitmap, blurRadius)
-          scaledBitmap.recycle()
-          currentBlurRadius = blurRadius
-        } catch (e: Exception) {
-          e.printStackTrace()
+    private fun updateDrawingRects() {
+      val holder = surfaceHolder ?: return
+      val canvasWidth = holder.surfaceFrame.width()
+      val canvasHeight = holder.surfaceFrame.height()
+      if (canvasWidth <= 0 || canvasHeight <= 0) return
+
+      currentBitmap?.let { bmp ->
+        if (!bmp.isRecycled) {
+          srcSharp.set(0, 0, bmp.width, bmp.height)
+          val scale = Math.max(canvasWidth.toFloat() / bmp.width, canvasHeight.toFloat() / bmp.height)
+          val w = (bmp.width * scale).toInt()
+          val h = (bmp.height * scale).toInt()
+          val left = (canvasWidth - w) / 2
+          val top = (canvasHeight - h) / 2
+          destRect.set(left, top, left + w, top + h)
         }
-      } else if (!blurEnabled) {
-        blurredBitmap?.recycle()
-        blurredBitmap = null
-        currentBlurRadius = -1
+      }
+
+      blurredBitmap?.let { bmp ->
+        if (!bmp.isRecycled) {
+          srcBlurred.set(0, 0, bmp.width, bmp.height)
+        }
       }
     }
 
@@ -288,49 +332,23 @@ class ThemeWallpaperService : WallpaperService() {
       try {
         canvas = holder.lockCanvas()
         if (canvas != null) {
-          if (currentBitmap != null && !currentBitmap!!.isRecycled) {
-            val srcSharp = Rect(0, 0, currentBitmap!!.width, currentBitmap!!.height)
-            
-            // Calculate scale based on the original sharp bitmap
-            val scaleX = canvas.width.toFloat() / currentBitmap!!.width
-            val scaleY = canvas.height.toFloat() / currentBitmap!!.height
-            val scale = Math.max(scaleX, scaleY)
-            
-            val newWidth = currentBitmap!!.width * scale
-            val newHeight = currentBitmap!!.height * scale
-            val left = (canvas.width - newWidth) / 2
-            val top = (canvas.height - newHeight) / 2
-            
-            val destRect = Rect(
-              left.toInt(), 
-              top.toInt(), 
-              (left + newWidth).toInt(), 
-              (top + newHeight).toInt()
-            )
-
-            // Draw based on transition
+          val bmp = currentBitmap
+          if (bmp != null && !bmp.isRecycled) {
             if (blurTransitionValue <= 0f) {
-              // Only draw sharp
               paint.alpha = 255
-              canvas.drawBitmap(currentBitmap!!, srcSharp, destRect, paint)
-            } else if (blurTransitionValue >= 1f && blurredBitmap != null && !blurredBitmap!!.isRecycled) {
-              // Only draw blurred
-              val srcBlurred = Rect(0, 0, blurredBitmap!!.width, blurredBitmap!!.height)
-              paint.alpha = 255
-              canvas.drawBitmap(blurredBitmap!!, srcBlurred, destRect, paint)
-            } else if (blurredBitmap != null && !blurredBitmap!!.isRecycled) {
-              // Crossfade transition
-              val srcBlurred = Rect(0, 0, blurredBitmap!!.width, blurredBitmap!!.height)
-              
-              paint.alpha = 255
-              canvas.drawBitmap(currentBitmap!!, srcSharp, destRect, paint)
-              
-              paint.alpha = (blurTransitionValue * 255).toInt()
-              canvas.drawBitmap(blurredBitmap!!, srcBlurred, destRect, paint)
+              canvas.drawBitmap(bmp, srcSharp, destRect, paint)
             } else {
-              // Fallback to sharp
-              paint.alpha = 255
-              canvas.drawBitmap(currentBitmap!!, srcSharp, destRect, paint)
+              val blurred = blurredBitmap
+              if (blurred != null && !blurred.isRecycled) {
+                // Crossfade
+                paint.alpha = 255
+                canvas.drawBitmap(bmp, srcSharp, destRect, paint)
+                paint.alpha = (blurTransitionValue * 255).toInt()
+                canvas.drawBitmap(blurred, srcBlurred, destRect, paint)
+              } else {
+                paint.alpha = 255
+                canvas.drawBitmap(bmp, srcSharp, destRect, paint)
+              }
             }
           } else {
             drawFallback(canvas)
@@ -342,40 +360,31 @@ class ThemeWallpaperService : WallpaperService() {
         if (canvas != null) {
           try {
             holder.unlockCanvasAndPost(canvas)
-          } catch (e: Exception) {
-            e.printStackTrace()
-          }
+          } catch (e: Exception) { }
         }
       }
     }
 
     private fun drawFallback(canvas: Canvas) {
       val isDarkTheme = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-      
-      // Material 3 colors matching WallpaperGenerator
       val colorSurface = if (isDarkTheme) 0xFF0D0614 else 0xFFFFF8F6 
       val colorPrimary = if (isDarkTheme) 0xFFE040FB else 0xFF8E24AA
       val colorSecondary = if (isDarkTheme) 0xFFFF8A65 else 0xFFD84315
       val colorTertiary = if (isDarkTheme) 0xFF26C6DA else 0xFF00838F
 
       canvas.drawColor(colorSurface.toInt())
-
       val blobPaint = Paint().apply {
         isAntiAlias = true
         style = Paint.Style.FILL
       }
-
       val w = canvas.width.toFloat()
       val h = canvas.height.toFloat()
-
       blobPaint.color = colorPrimary.toInt()
       blobPaint.alpha = 150
       canvas.drawCircle(w * 0.2f, h * 0.3f, w * 0.8f, blobPaint)
-
       blobPaint.color = colorSecondary.toInt()
       blobPaint.alpha = 130
       canvas.drawCircle(w * 0.8f, h * 0.6f, w * 0.9f, blobPaint)
-
       blobPaint.color = colorTertiary.toInt()
       blobPaint.alpha = 110
       canvas.drawCircle(w * 0.4f, h * 0.9f, w * 0.7f, blobPaint)

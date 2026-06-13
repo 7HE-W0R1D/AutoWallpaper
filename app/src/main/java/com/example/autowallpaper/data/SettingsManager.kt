@@ -41,11 +41,17 @@ class SettingsManager(private val context: Context) {
 
   var usingCustomLight: Boolean
     get() = prefs.getBoolean(KEY_USING_CUSTOM_LIGHT, false)
-    set(value) = prefs.edit().putBoolean(KEY_USING_CUSTOM_LIGHT, value).apply()
+    set(value) {
+      prefs.edit().putBoolean(KEY_USING_CUSTOM_LIGHT, value).apply()
+      notifyChanged()
+    }
 
   var usingCustomDark: Boolean
     get() = prefs.getBoolean(KEY_USING_CUSTOM_DARK, false)
-    set(value) = prefs.edit().putBoolean(KEY_USING_CUSTOM_DARK, value).apply()
+    set(value) {
+      prefs.edit().putBoolean(KEY_USING_CUSTOM_DARK, value).apply()
+      notifyChanged()
+    }
 
   fun getLightWallpaperFile(): File {
     val file = File(context.filesDir, LIGHT_WALLPAPER_FILENAME)

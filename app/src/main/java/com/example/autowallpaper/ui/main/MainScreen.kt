@@ -253,11 +253,11 @@ fun AboutSection() {
           color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
-          text = "1.0.4",
+          text = "1.0.5",
           style = MaterialTheme.typography.bodyMedium,
           color = MaterialTheme.colorScheme.primary,
           modifier = Modifier.clickable {
-            uriHandler.openUri("https://github.com/7HE-W0R1D/AutoWallpaper/releases/tag/v1.0.4")
+            uriHandler.openUri("https://github.com/7HE-W0R1D/AutoWallpaper/releases/tag/v1.0.5")
           }
         )
       }

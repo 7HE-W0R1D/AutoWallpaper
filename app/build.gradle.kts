@@ -12,13 +12,28 @@ android {
         minSdk = 24
         targetSdk = 36
         versionCode = 1
-        versionName = "1.0.4"
+        versionName = "1.0.5"
+    }
+
+    signingConfigs {
+        create("release") {
+            // 从环境变量读取签名信息（由 GitHub Actions 提供）
+            storeFile = file(System.getenv("KEYSTORE_PATH") ?: "debug.keystore")
+            storePassword = System.getenv("KEY_STORE_PASSWORD")
+            keyAlias = System.getenv("ALIAS")
+            keyPassword = System.getenv("KEY_PASSWORD")
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("release")
+        }
+        debug {
+            // 调试模式也可以共用这个签名，确保本地调试版和正式版也能互相覆盖
+            signingConfig = if (System.getenv("KEY_STORE_PASSWORD") != null) signingConfigs.getByName("release") else null
         }
     }
     compileOptions {
